@@ -278,6 +278,10 @@ int tsk_treeseq_kc_distance(
 int tsk_treeseq_genealogical_nearest_neighbours(tsk_treeseq_t *self, tsk_id_t *focal,
     size_t num_focal, tsk_id_t **reference_sets, size_t *reference_set_size,
     size_t num_reference_sets, tsk_flags_t options, double *ret_array);
+int tsk_treeseq_windowed_genealogical_nearest_neighbours(tsk_treeseq_t *self,
+    size_t result_dim, tsk_id_t *focal, size_t num_focal, tsk_id_t **reference_sets,
+    size_t *reference_set_size, size_t num_reference_sets, size_t num_time_windows,
+    double *time_windows, tsk_flags_t options, double *ret_array);
 int tsk_treeseq_mean_descendants(tsk_treeseq_t *self, tsk_id_t **reference_sets,
     size_t *reference_set_size, size_t num_reference_sets, tsk_flags_t options,
     double *ret_array);

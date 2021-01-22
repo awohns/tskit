@@ -5110,6 +5110,45 @@ test_genealogical_nearest_neighbours_errors(void)
 }
 
 static void
+test_windowed_genealogical_nearest_neighbours_errors(void)
+{
+    int ret;
+    tsk_treeseq_t ts;
+    tsk_id_t *reference_sets[2];
+    tsk_id_t focal[] = { 0, 1, 2, 3 };
+    size_t reference_set_size[2];
+    size_t result_dim = 3;
+    size_t num_focal = 4;
+    size_t num_time_windows = 3;
+    double time_windows[] = {0, 1, 2};
+    double *A = malloc(2 * 3 * num_focal * sizeof(double));
+    CU_ASSERT_FATAL(A != NULL);
+
+    tsk_treeseq_from_text(&ts, 1, single_tree_ex_nodes, single_tree_ex_edges, NULL, NULL,
+        NULL, NULL, NULL);
+    CU_ASSERT_EQUAL(tsk_treeseq_get_num_samples(&ts), 4);
+    CU_ASSERT_EQUAL(tsk_treeseq_get_num_trees(&ts), 1);
+
+    ret = tsk_treeseq_windowed_genealogical_nearest_neighbours(
+        &ts, result_dim, focal, num_focal, reference_sets, reference_set_size, 0,
+        num_time_windows, time_windows, 0, A);
+    CU_ASSERT_EQUAL_FATAL(ret, TSK_ERR_BAD_PARAM_VALUE);
+    ret = tsk_treeseq_windowed_genealogical_nearest_neighbours(
+        &ts, result_dim, focal, num_focal, reference_sets, reference_set_size,
+        INT16_MAX, num_time_windows, time_windows, 0, A);
+    CU_ASSERT_EQUAL_FATAL(ret, TSK_ERR_BAD_PARAM_VALUE);
+
+    /* Test bad time windows */ 
+    ret = tsk_treeseq_windowed_genealogical_nearest_neighbours(
+        &ts, result_dim, focal, num_focal, reference_sets, reference_set_size,
+        INT16_MAX, 0, time_windows, 0, A);
+    CU_ASSERT_EQUAL_FATAL(ret, TSK_ERR_BAD_NUM_WINDOWS);
+
+    tsk_treeseq_free(&ts);
+    free(A);
+}
+
+static void
 test_tree_errors(void)
 {
     int ret;
@@ -5783,6 +5822,8 @@ main(int argc, char **argv)
         { "test_tree_copy_flags", test_tree_copy_flags },
         { "test_genealogical_nearest_neighbours_errors",
             test_genealogical_nearest_neighbours_errors },
+        { "test_windowed_genealogical_nearest_neighbours_errors",
+            test_windowed_genealogical_nearest_neighbours_errors },
         { "test_deduplicate_sites", test_deduplicate_sites },
         { "test_deduplicate_sites_errors", test_deduplicate_sites_errors },
         { "test_deduplicate_sites_zero_rows", test_deduplicate_sites_zero_rows },
