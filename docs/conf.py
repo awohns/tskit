@@ -281,7 +281,6 @@ intersphinx_mapping = {
     "https://docs.python.org/3": None,
     "https://numpy.org/doc/stable/": None,
     "https://svgwrite.readthedocs.io/en/stable/": None,
-    "tutorials": ("https://tskit.dev/tutorials/", None),
 }
 
 # -- Options for todo extension ----------------------------------------------

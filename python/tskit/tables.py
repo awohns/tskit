@@ -27,7 +27,6 @@ import dataclasses
 import datetime
 import itertools
 import json
-import numbers
 import sys
 import warnings
 from dataclasses import dataclass
@@ -336,43 +335,16 @@ class BaseTable:
 
     def __getitem__(self, index):
         """
-        If passed an integer, return the specified row of this table, decoding metadata
-        if it is present. Supports negative indexing, e.g. ``table[-5]``.
-        If passed a slice, iterable or array return a new table containing the specified
-        rows. Similar to numpy fancy indexing, if the array or iterables contains
-        booleans then the index acts as a mask, returning those rows for which the mask
-        is True. Note that as the result is a new table, the row ids will change as tskit
-        row ids are row indexes.
+        Return the specified row of this table, decoding metadata if it is present.
+        Supports negative indexing, e.g. ``table[-5]``.
 
-        :param index: the zero-index of a desired row, a slice of the desired rows, an
-            iterable or array of the desired row numbers, or a boolean array to use as
-            a mask.
+        :param int index: the zero-index of the desired row
         """
-
-        if isinstance(index, numbers.Integral):
-            # Single row by integer
-            if index < 0:
-                index += len(self)
-            if index < 0 or index >= len(self):
-                raise IndexError("Index out of bounds")
-            return self.row_class(*self.ll_table.get_row(index))
-        elif isinstance(index, numbers.Number):
-            raise TypeError("Index must be integer, slice or iterable")
-        elif isinstance(index, slice):
-            index = range(*index.indices(len(self)))
-        else:
-            index = np.asarray(index)
-            if index.dtype == np.bool_:
-                if len(index) != len(self):
-                    raise IndexError("Boolean index must be same length as table")
-                index = np.flatnonzero(index)
-            index = util.safe_np_int_cast(index, np.int32)
-
-        ret = self.__class__()
-        ret.metadata_schema = self.metadata_schema
-        ret.ll_table.extend(self.ll_table, row_indexes=index)
-
-        return ret
+        if index < 0:
+            index += len(self)
+        if index < 0 or index >= len(self):
+            raise IndexError("Index out of bounds")
+        return self.row_class(*self.ll_table.get_row(index))
 
     def append(self, row):
         """

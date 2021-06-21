@@ -34,7 +34,6 @@ import textwrap
 import warnings
 from dataclasses import dataclass
 from typing import Any
-from typing import NamedTuple
 from typing import Optional
 from typing import Union
 
@@ -54,41 +53,32 @@ from tskit import NULL
 from tskit import UNKNOWN_TIME
 
 
-class CoalescenceRecord(NamedTuple):
-    left: float
-    right: float
-    node: int
-    children: np.ndarray
-    time: float
-    population: int
+CoalescenceRecord = collections.namedtuple(
+    "CoalescenceRecord", ["left", "right", "node", "children", "time", "population"]
+)
+
+BaseInterval = collections.namedtuple("BaseInterval", ["left", "right"])
+
+EdgeDiff = collections.namedtuple("EdgeDiff", ["interval", "edges_out", "edges_in"])
 
 
-class Interval(NamedTuple):
+class Interval(BaseInterval):
     """
     A tuple of 2 numbers, ``[left, right)``, defining an interval over the genome.
 
     :ivar left: The left hand end of the interval. By convention this value is included
         in the interval.
     :vartype left: float
-    :ivar right: The right hand end of the interval. By convention this value is *not*
-        included in the interval, i.e., the interval is half-open.
+    :ivar right: The right hand end of the iterval. By convention this value is *not*
+        included in the interval, i.e. the interval is half-open.
     :vartype right: float
     :ivar span: The span of the genome covered by this interval, simply ``right-left``.
     :vartype span: float
     """
 
-    left: float
-    right: float
-
     @property
-    def span(self) -> float:
+    def span(self):
         return self.right - self.left
-
-
-class EdgeDiff(NamedTuple):
-    interval: Interval
-    edges_out: list
-    edges_in: list
 
 
 @metadata_module.lazy_decode
@@ -251,7 +241,7 @@ class Edge(util.Dataclass):
     @property
     def span(self):
         """
-        Returns the span of this edge, i.e., the right position minus the left position
+        Returns the span of this edge, i.e. the right position minus the left position
 
         :return: The span of this edge.
         :rtype: float
@@ -511,7 +501,7 @@ class Variant(util.Dataclass):
     way via a numpy array to enable efficient calculations.
 
     When :ref:`missing data<sec_data_model_missing_data>` is present at a given
-    site, the property ``has_missing_data`` will be True, at least one element
+    site boolean flag ``has_missing_data`` will be True, at least one element
     of the ``genotypes`` array will be equal to ``tskit.MISSING_DATA``, and the
     last element of the ``alleles`` array will be ``None``. Note that in this
     case ``variant.num_alleles`` will **not** be equal to
@@ -520,7 +510,7 @@ class Variant(util.Dataclass):
     correctly fail early rather than introducing subtle and hard-to-find bugs.
     As ``tskit.MISSING_DATA`` is equal to -1, code that decodes genotypes into
     allelic values without taking missing data into account would otherwise
-    incorrectly output the last allele in the list.
+    output the last allele in the list rather missing data.
 
     Modifying the attributes in this class will have **no effect** on the
     underlying tree sequence data.
@@ -1497,7 +1487,8 @@ class Tree:
         :return: The genomic distance covered by this tree.
         :rtype: float
         """
-        return self.interval.span
+        left, right = self.get_interval()
+        return right - left
 
     # The sample_size (or num_samples) is really a property of the tree sequence,
     # and so we should provide access to this via a tree.tree_sequence.num_samples
@@ -1523,69 +1514,15 @@ class Tree:
         """
         return self._ll_tree.get_sample_size()
 
-    def draw_text(
-        self,
-        orientation=None,
-        *,
-        node_labels=None,
-        max_time=None,
-        use_ascii=False,
-        order=None,
-    ):
-        """
-        Create a text representation of a tree.
-
-        :param str orientation: one of ``"top"``, ``"left"``, ``"bottom"``, or
-            ``"right"``, specifying the margin on which the root is placed. Specifying
-            ``"left"`` or ``"right"`` will lead to time being shown on the x axis (i.e.
-            a "horizontal" tree. If ``None`` (default) use the standard coalescent
-            arrangement of a vertical tree with recent nodes at the bottom of the plot
-            and older nodes above.
-        :param dict node_labels: If specified, show custom labels for the nodes
-            that are present in the map. Any nodes not specified in the map will
-            not have a node label.
-        :param str max_time: If equal to ``"tree"`` (the default), the maximum time
-            is set to be that of the oldest root in the tree. If equal to ``"ts"`` the
-            maximum time is set to be the time of the oldest root in the tree
-            sequence; this is useful when drawing trees from the same tree sequence as it
-            ensures that node heights are consistent.
-        :param bool use_ascii: If ``False`` (default) then use unicode
-            `box drawing characters \
-<https://en.wikipedia.org/wiki/Box-drawing_character>`_
-            to render the tree. If ``True``, use plain ascii characters, which look
-            cruder but are less susceptible to misalignment or font substitution.
-            Alternatively, if you are having alignment problems with Unicode, you can try
-            out the solution documented `here \
-<https://github.com/tskit-dev/tskit/issues/189#issuecomment-499114811>`_.
-        :param str order: The left-to-right ordering of child nodes in the drawn tree.
-            This can be either: ``"minlex"``, which minimises the differences
-            between adjacent trees (see also the ``"minlex_postorder"`` traversal
-            order for the :meth:`.nodes` method); or ``"tree"`` which draws trees
-            in the left-to-right order defined by the
-            :ref:`quintuply linked tree structure <sec_data_model_tree_structure>`.
-            If not specified or None, this defaults to ``"minlex"``.
-
-        :return: A text representation of a tree.
-        :rtype: str
-        """
+    def draw_text(self, orientation=None, **kwargs):
         orientation = drawing.check_orientation(orientation)
         if orientation in (drawing.LEFT, drawing.RIGHT):
             text_tree = drawing.HorizontalTextTree(
-                self,
-                orientation=orientation,
-                node_labels=node_labels,
-                max_time=max_time,
-                use_ascii=use_ascii,
-                order=order,
+                self, orientation=orientation, **kwargs
             )
         else:
             text_tree = drawing.VerticalTextTree(
-                self,
-                orientation=orientation,
-                node_labels=node_labels,
-                max_time=max_time,
-                use_ascii=use_ascii,
-                order=order,
+                self, orientation=orientation, **kwargs
             )
         return str(text_tree)
 
@@ -1615,10 +1552,108 @@ class Tree:
         **kwargs,
     ):
         """
-        Return an SVG representation of a single tree. By default, numeric
+        Return an SVG representation of a single tree. Sample nodes are represented as
+        black squares, other nodes are black circles, and mutations are red crosses,
+        although these default styles can be altered (see below). By default, numeric
         labels are drawn beside nodes and mutations: these can be altered using the
-        ``node_labels`` and ``mutation_labels`` parameters. See the
-        :ref:`visualization tutorial<tutorials:sec_tskit_viz>` for more details.
+        ``node_labels`` and ``mutation_labels`` parameters.
+
+
+        When working in a Jupyter notebook, use the ``IPython.display.SVG`` function
+        to display the SVG output from this function inline in the notebook::
+
+            >>> SVG(tree.draw_svg())
+
+        The elements in the tree are grouped according to the structure of the tree,
+        using `SVG groups <https://www.w3.org/TR/SVG2/struct.html#Groups>`_. This allows
+        easy styling and manipulation of elements and subtrees. Elements in the SVG file
+        are marked with SVG classes so that they can be targetted, allowing
+        different components of the drawing to be hidden, styled, or otherwise
+        manipulated. For example, when drawing (say) the first tree from a tree
+        sequence, all the SVG components will be placed in a group of class ``tree``.
+        The group will have the additional class ``t0``, indicating that this tree
+        has index 0 in the tree sequence. The general SVG structure is as follows:
+
+        The tree is contained in a group of class ``tree``. Additionally, this group
+        has a class ``tN`` where `N` is the tree index.
+
+        Within the ``tree`` group there is a nested hierarchy of groups corresponding
+        to the tree structure. Any particular node in the tree will have a corresponding
+        group containing child groups (if any) followed by the edge above that node, a
+        node symbol, and (potentially) text containing the node label. For example, a
+        simple two tip tree, with tip node ids 0 and 1, and a root node id of 2, and with
+        some bespoke labels, will have a structure similar to the following:
+
+        .. code-block::
+
+            <g class="tree t0">
+              <g class="node n2 root">
+                <g class="node n1 a2 i1 p1 sample leaf">
+                  <path class="edge" ... />
+                  <rect class="sym" ... />
+                  <text class="lab" ...>Node 1</text>
+                </g>
+                <g class="node n0 a2 i2 p1 sample leaf">
+                  <path class="edge" ... />
+                  <rect class="sym" .../>
+                  <text class="lab" ...>Node 0</text>
+                </g>
+                <path class="edge" ... />
+                <circle class="sym" ... />
+                <text class="lab">Root (Node 2)</text>
+              </g>
+            </g>
+
+        The classes can be used to manipulate the element, e.g. by using
+        `stylesheets <https://www.w3.org/TR/SVG2/styling.html>`_. Style strings can
+        be embedded in the svg by using the ``style`` parameter, or added to html
+        pages which contain the raw SVG (e.g. within a Jupyter notebook by using the
+        IPython ``HTML()`` function). As a simple example, passing the following
+        string as the ``style`` parameter will hide all labels:
+
+        .. code-block:: css
+
+            .tree .lab {visibility: hidden}
+
+        You can also change the format of various items: in SVG2-compatible viewers,
+        the following styles will rotate the leaf nodes labels by 90 degrees, colour
+        the leaf node symbols blue, and
+        hide the non-sample node labels. Note that SVG1.1 does not recognize the
+        ``transform`` style, so in some SVG viewers, the labels will not appear rotated:
+        a workaround is to convert the SVG to PDF first, using e.g. the programmable
+        chromium engine: ``chromium --headless --print-to-pdf=out.pdf in.svg``)
+
+        .. code-block:: css
+
+            .tree .node.leaf > .lab {
+                transform: translateY(0.5em) rotate(90deg); text-anchor: start}
+            .tree .node.leaf > .sym {fill: blue}
+            .tree .node:not(.sample) > .lab {visibility: hidden}
+
+        Nodes contain classes that allow them to be targetted by node id (``nX``),
+        ancestor (parent) id (``aX`` or ``root`` if this node has no parent), and
+        (if defined) the id of the individual (``iX``) and population (``pX``) to
+        which this node belongs. Hence the following style will display
+        a large symbol for node 10, coloured red with a black border, and will also use
+        thick red lines for all the edges that have it as a direct or indirect parent
+        (note that, as with the ``transform`` style, changing the geometrical size of
+        symbols is only possible in SVG2 and above and therefore not all SVG viewers
+        will render such symbol size changes correctly).
+
+        .. code-block:: css
+
+            .tree .node.n10 > .sym {fill: red; stroke: black; r: 8px}
+            .tree .node.a10 .edge {stroke: red; stroke-width: 2px}
+
+        .. note::
+
+            A feature of SVG style commands is that they apply not just to the contents
+            within the <svg> container, but to the entire file. Thus if an SVG file is
+            embedded in a larger document, such as an HTML file (e.g. when an SVG
+            is displayed inline in a Jupyter notebook), the style will apply to all SVG
+            drawings in the notebook. To avoid this, you can tag the SVG with a unique
+            SVG using ``root_svg_attributes={'id':'MY_UID'}``, and prepend this to the
+            style string, as in ``#MY_UID .tree .edges {stroke: gray}``.
 
         :param str path: The path to the file to write the output. If None, do not
             write to file.
@@ -1641,7 +1676,7 @@ class Tree:
             sequence; this is useful when drawing trees from the same tree sequence as it
             ensures that node heights are consistent. If a numeric value, this is used as
             the maximum time by which to scale other nodes.
-        :param str,float max_tree_height: Deprecated alias for max_time. (Deprecated in
+        :param str,float max_time: Deprecated alias for max_tree_height. (Deprecated in
             0.3.6)
         :param node_labels: If specified, show custom labels for the nodes
             (specified by ID) that are present in this map; any nodes not present will
@@ -1655,14 +1690,12 @@ class Tree:
             be embedded in the root ``<svg>`` tag of the generated drawing.
         :param str style: A
             `css style string <https://www.w3.org/TR/CSS22/syndata.html>`_ that will be
-            included in the ``<style>`` tag of the generated svg.
-        :param str order: The left-to-right ordering of child nodes in the drawn tree.
-            This can be either: ``"minlex"``, which minimises the differences
-            between adjacent trees (see also the ``"minlex_postorder"`` traversal
-            order for the :meth:`.nodes` method); or ``"tree"`` which draws trees
-            in the left-to-right order defined by the
-            :ref:`quintuply linked tree structure <sec_data_model_tree_structure>`.
-            If not specified or None, this defaults to ``"minlex"``.
+            included in the ``<style>`` tag of the generated svg. Note that certain
+            styles, in particular transformations and changes in geometrical properties
+            of objects, will only be recognised by SVG2-compatible viewers.
+        :param str order: A string specifying the traversal type used to order the tips
+            in the tree, as detailed in :meth:`Tree.nodes`. If None (default), use
+            the default order as described in that method.
         :param bool force_root_branch: If ``True`` always plot a branch (edge) above the
             root(s) in the tree. If ``None`` (default) then only plot such root branches
             if there is a mutation above a root of the tree.
@@ -1688,7 +1721,8 @@ class Tree:
             on an edge if their site position exists within the genomic interval covered
             by this tree. If ``True``, all mutations on each edge of the tree are drawn,
             even if the their genomic position is to the left or right of the tree
-            itself. Note that this means that independent drawings of different trees
+            itself (by default these "extra" mutations are drawn in a different colour).
+            Note that this means that independent drawings of different trees
             from the same tree sequence may share some plotted mutations.
 
         :return: An SVG representation of a tree.
@@ -1994,7 +2028,7 @@ class Tree:
     def num_children(self, u):
         """
         Returns the number of children of the specified
-        node (i.e., ``len(tree.children(u))``)
+        node (i.e. ``len(tree.children(u))``)
 
         :param int u: The node of interest.
         :return: The number of immediate children of the node u in this tree.
@@ -2335,7 +2369,7 @@ class Tree:
         Returns a `newick encoding <https://en.wikipedia.org/wiki/Newick_format>`_
         of this tree. If the ``root`` argument is specified, return a representation
         of the specified subtree, otherwise the full tree is returned. If the tree
-        has multiple roots then separate newick strings for each rooted subtree
+        has multiple roots then seperate newick strings for each rooted subtree
         must be found (i.e., we do not attempt to concatenate the different trees).
 
         By default, leaf nodes are labelled with their numerical ID + 1,
@@ -2483,7 +2517,7 @@ class Tree:
 
         .. note::
             Sample states observed as missing in the input ``genotypes`` need
-            not correspond to samples whose nodes are actually "missing" (i.e.,
+            not correspond to samples whose nodes are actually "missing" (i.e.
             :ref:`isolated<sec_data_model_missing_data>`) in the tree. In this
             case, mapping the mutations returned by this method onto the tree
             will result in these missing observations being imputed to the
@@ -2615,7 +2649,7 @@ class Tree:
         num_leaves, *, span=1, branch_length=1, record_provenance=True, **kwargs
     ):
         """
-        Generate a :class:`Tree` whose leaf nodes all have the same parent (i.e.,
+        Generate a :class:`Tree` whose leaf nodes all have the same parent (i.e.
         a "star" tree). The leaf nodes are all at time 0 and are marked as sample nodes.
 
         The tree produced by this method is identical to
@@ -2705,7 +2739,7 @@ class Tree:
         """
         Generate a :class:`Tree` in which all internal nodes have two children
         and the left child is a leaf. This is a "comb", "ladder" or "pectinate"
-        phylogeny, and also known as a `caterpillar tree
+        phylogeny, and also known as a `caterpiller tree
         <https://en.wikipedia.org/wiki/Caterpillar_tree>`_.
 
         The leaf nodes are all at time 0, marked as samples,
@@ -2751,7 +2785,7 @@ class Tree:
         """
         Generate a random binary :class:`Tree` with :math:`n` = ``num_leaves``
         leaves with an equal probability of returning any topology and
-        leaf label permutation among the :math:`(2n - 3)! / (2^{n - 2} (n - 2)!)`
+        leaf label permutation among the :math:`(2n - 3)! / (2^(n - 2) (n - 2)!)`
         leaf-labelled binary trees.
 
         The leaf nodes are marked as samples, labelled 0 to n, and placed at
@@ -3415,8 +3449,8 @@ class TreeSequence:
         ignore_timestamps=False,
     ):
         """
-        Returns True if  `self` and `other` are equal. Uses the underlying table
-        equality, see :meth:`TableCollection.equals` for details and options.
+        Returns True if  `self` and `other` are equal. Uses the underlying table equlity,
+        see :meth:`TableCollection.equals` for details and options.
         """
         return self.tables.equals(
             other.tables,
@@ -3506,7 +3540,7 @@ class TreeSequence:
         A copy of the tables underlying this tree sequence. See also
         :meth:`.dump_tables`.
 
-        .. warning:: This property currently returns a copy of the tables
+        .. warning:: This propery currently returns a copy of the tables
             underlying a tree sequence but it may return a read-only
             **view** in the future. Thus, if the tables will subsequently be
             updated, please use the :meth:`.dump_tables` method instead as
@@ -3996,7 +4030,7 @@ class TreeSequence:
         in this tree sequence. Edges are returned in the order required
         for a :ref:`valid tree sequence <sec_valid_tree_sequence_requirements>`. So,
         edges are guaranteed to be ordered such that (a) all parents with a
-        given ID are contiguous; (b) edges are returned in non-decreasing
+        given ID are contiguous; (b) edges are returned in non-descreasing
         order of parent time ago; (c) within the edges for a given parent, edges
         are sorted first by child ID and then by left coordinate.
 
@@ -4059,7 +4093,7 @@ class TreeSequence:
         each list, edges with the same parent appear consecutively.
 
         :param bool include_terminal: If False (default), the iterator terminates
-            after the final interval in the tree sequence (i.e., it does not
+            after the final interval in the tree sequence (i.e. it does not
             report a final removal of all remaining edges), and the number
             of iterations will be equal to the number of trees in the tree
             sequence. If True, an additional iteration takes place, with the last
@@ -4145,7 +4179,7 @@ class TreeSequence:
         if ``as_array`` is True we return them as a numpy array.
 
         Note that the ``as_array`` form will be more efficient and convenient in most
-        cases; the default iterator behaviour is mainly kept to ensure compatibility
+        cases; the default iterator behaviour is mainly kept to ensure compatability
         with existing code.
 
         :param bool as_array: If True, return the breakpoints as a numpy array.
@@ -4251,7 +4285,7 @@ class TreeSequence:
         :param list tracked_samples: The list of samples to be tracked and
             counted using the :meth:`Tree.num_tracked_samples` method.
         :param bool sample_lists: If True, provide more efficient access
-            to the samples beneath a given node using the
+            to the samples beneath a give node using the
             :meth:`Tree.samples` method.
         :param int root_threshold: The minimum number of samples that a node
             must be ancestral to for it to be in the list of roots. By default
@@ -4338,7 +4372,7 @@ class TreeSequence:
         haplotype for sample ``0``, and so on.
 
         The alleles at each site must be represented by single byte characters,
-        (i.e., variants must be single nucleotide polymorphisms, or SNPs), hence
+        (i.e. variants must be single nucleotide polymorphisms, or SNPs), hence
         the strings returned will all be of length :math:`s`, and for a haplotype
         ``h``, the value of ``h[j]`` will be the observed allelic state
         at site ``j``.
@@ -4464,16 +4498,19 @@ class TreeSequence:
         possible to detect missing data for non-sample nodes.
 
         If isolated samples are present at a given site without mutations above them,
-        they are interpreted by default as
-        :ref:`missing data<sec_data_model_missing_data>`, and the genotypes array
-        will contain a special value :data:`MISSING_DATA` (-1) to identify them
-        while the ``alleles`` tuple will end with the value ``None`` (note that this
-        will be the case whether or not we specify a fixed mapping using the
-        ``alleles`` parameter; see the :class:`Variant` class for more details).
-        Alternatively, if ``isolated_as_missing`` is set to to False, such isolated
-        samples will not be treated as missing, and instead assigned the ancestral
-        state (this was the default behaviour in versions prior to 0.2.0). Prior to
-        0.3.0 the `impute_missing_data` argument controlled this behaviour.
+        they will be interpreted as :ref:`missing data<sec_data_model_missing_data>`
+        the genotypes array will contain a special value :data:`MISSING_DATA`
+        (-1) to identify these missing samples, and the ``alleles`` tuple will
+        end with the value ``None`` (note that this is true whether we specify
+        a fixed mapping using the ``alleles`` parameter or not).
+        See the :class:`Variant` class for more details on how missing data is
+        reported.
+
+        Such samples are treated as missing data by default, but if
+        ``isolated_as_missing`` is set to to False, they will not be treated as
+        missing, and so assigned the ancestral state.
+        This was the default behaviour in versions prior to 0.2.0. Prior to 0.3.0
+        the `impute_missing_data` argument controlled this behaviour.
 
         .. note::
             The ``as_bytes`` parameter is kept as a compatibility
@@ -4493,7 +4530,7 @@ class TreeSequence:
         :param tuple alleles: A tuple of strings defining the encoding of
             alleles as integer genotype values. At least one allele must be provided.
             If duplicate alleles are provided, output genotypes will always be
-            encoded as the first occurrence of the allele. If None (the default),
+            encoded as the first occurance of the allele. If None (the default),
             the alleles are encoded as they are encountered during genotype
             generation.
         :param bool impute_missing_data:
@@ -4566,7 +4603,7 @@ class TreeSequence:
         :param tuple alleles: A tuple of strings describing the encoding of
             alleles to genotype values. At least one allele must be provided.
             If duplicate alleles are provided, output genotypes will always be
-            encoded as the first occurrence of the allele. If None (the default),
+            encoded as the first occurance of the allele. If None (the default),
             the alleles are encoded as they are encountered during genotype
             generation.
         :param bool impute_missing_data:
@@ -4798,7 +4835,7 @@ class TreeSequence:
         Writes haplotype data for samples in FASTA format to the
         specified file-like object.
 
-        Default `sequence_ids` (i.e., the text immediately following ">") are
+        Default `sequence_ids` (i.e. the text immediately following ">") are
         "tsk_{sample_number}" e.g. "tsk_0", "tsk_1" etc. They can be set by providing
         a list of strings to the `sequence_ids` argument, which must equal the length
         of the number of samples. Please ensure that these are unique and compatible with
@@ -5148,7 +5185,7 @@ class TreeSequence:
             not referenced by mutations after simplification; new site IDs are
             allocated sequentially from zero. If False, the site table will not
             be altered in any way. (Default: True)
-        :param bool keep_unary: If True, preserve unary nodes (i.e., nodes with
+        :param bool keep_unary: If True, preserve unary nodes (i.e. nodes with
             exactly one child) that exist on the path from samples to root.
             (Default: False)
         :param bool keep_unary_in_individuals: If True, preserve unary nodes
@@ -5274,11 +5311,10 @@ class TreeSequence:
     def ltrim(self, record_provenance=True):
         """
         Returns a copy of this tree sequence with a potentially changed coordinate
-        system, such that empty regions (i.e., those not covered by any edge) at the
-        start of the tree sequence are trimmed away, and the leftmost edge starts at
-        position 0. This affects the reported position of sites and
-        edges. Additionally, sites and their associated mutations to the left of
-        the new zero point are thrown away.
+        system, such that empty regions (i.e. those not covered by any edge) at the start
+        of the tree sequence are trimmed away, and the leftmost edge starts at position
+        0. This affects the reported position of sites and edges. Additionally, sites and
+        their associated mutations to the left of the new zero point are thrown away.
 
         :param bool record_provenance: If True, add details of this operation to the
             provenance information of the returned tree sequence. (Default: True).
@@ -5303,7 +5339,7 @@ class TreeSequence:
 
     def trim(self, record_provenance=True):
         """
-        Returns a copy of this tree sequence with any empty regions (i.e., those not
+        Returns a copy of this tree sequence with any empty regions (i.e. those not
         covered by any edge) on the right and left trimmed away. This may reset both the
         coordinate system and the ``sequence_length`` property. It is functionally
         equivalent to :meth:`.rtrim` followed by :meth:`.ltrim`. Sites and their
@@ -5330,7 +5366,7 @@ class TreeSequence:
         which both parent and child are in ``nodes```, only mutations whose
         node is in ``nodes``, and only individuals that are referred to by one
         of the retained nodes.  Note that this does *not* retain
-        the ancestry of these nodes - for that, see :meth:`.simplify`.
+        the ancestry of these nodes - for that, see ::meth::`.simplify`.
 
         This has the side effect of reordering the nodes, individuals, and
         populations in the tree sequence: the nodes in the new tree sequence
@@ -5341,7 +5377,7 @@ class TreeSequence:
 
         By default, the method removes all individuals and populations not
         referenced by any nodes, and all sites not referenced by any mutations.
-        To retain these unreferenced individuals, populations, and sites, pass
+        To retain these unreferencd individuals, populations, and sites, pass
         ``remove_unreferenced=False``. If this is done, the site table will
         remain unchanged, unreferenced individuals will appear at the end of
         the individuals table (and in their original order), and unreferenced
@@ -5455,8 +5491,29 @@ class TreeSequence:
         **kwargs,
     ):
         """
-        Return an SVG representation of a tree sequence. See the
-        :ref:`visualization tutorial<tutorials:sec_tskit_viz>` for more details.
+        Return an SVG representation of a tree sequence.
+
+        When working in a Jupyter notebook, use the ``IPython.display.SVG`` function
+        to display the SVG output from this function inline in the notebook::
+
+            >>> SVG(tree.draw_svg())
+
+        The visual elements in the svg are
+        `grouped <https://www.w3.org/TR/SVG2/struct.html#Groups>`_
+        for easy styling and manipulation. The entire visualization with trees and X
+        axis is contained within a group of class ``tree-sequence``. Each tree in
+        the displayed tree sequence is contained in a group of class ``tree``, as
+        described in :meth:`Tree.draw_svg`, so that visual elements pertaining to one
+        or more trees targetted as documented in that method. For instance, the
+        following style will change the colour of all the edges of the *initial*
+        tree in the sequence and hide the non-sample node labels in *all* the trees
+
+        .. code-block:: css
+
+            .tree.t0 .edge {stroke: blue}
+            .tree .node:not(.sample) > text {visibility: hidden}
+
+        See :meth:`Tree.draw_svg` for further details.
 
         :param str path: The path to the file to write the output. If None, do not write
             to file.
@@ -5491,13 +5548,9 @@ class TreeSequence:
             be embedded in the root ``<svg>`` tag of the generated drawing.
         :param str style: A `css string <https://www.w3.org/TR/CSS21/syndata.htm>`_
             that will be included in the ``<style>`` tag of the generated svg.
-        :param str order: The left-to-right ordering of child nodes in each drawn tree.
-            This can be either: ``"minlex"``, which minimises the differences
-            between adjacent trees (see also the ``"minlex_postorder"`` traversal
-            order for the :meth:`.nodes` method); or ``"tree"`` which draws trees
-            in the left-to-right order defined by the
-            :ref:`quintuply linked tree structure <sec_data_model_tree_structure>`.
-            If not specified or None, this defaults to ``"minlex"``.
+        :param str order: A string specifying the traversal type used to order the tips
+            in each tree, as detailed in :meth:`Tree.nodes`. If None (default), use
+            the default order as described in that method.
         :param bool force_root_branch: If ``True`` plot a branch (edge) above every tree
             root in the tree sequence. If ``None`` (default) then only plot such
             root branches if any root in the tree sequence has a mutation above it.
@@ -5536,7 +5589,7 @@ class TreeSequence:
             axis, and x_lim[1] specifies a *maximum* value for the end. This is only
             relevant if the tree sequence contains "empty" regions with no edges or
             mutations. In this case if x_lim[0] lies strictly within an empty region
-            (i.e., ``empty_tree.interval.left < x_lim[0] < empty_tree.interval.right``)
+            (i.e. ``empty_tree.interval.left < x_lim[0] < empty_tree.interval.right``)
             then that tree will not be plotted on the left hand side, and the X axis
             will start at ``empty_tree.interval.right``. Similarly, if x_lim[1] lies
             strictly within an empty region then that tree will not be plotted on the
@@ -5570,57 +5623,9 @@ class TreeSequence:
             draw.drawing.saveas(path, pretty=True)
         return output
 
-    def draw_text(
-        self,
-        *,
-        node_labels=None,
-        use_ascii=False,
-        time_label_format=None,
-        position_label_format=None,
-        order=None,
-        **kwargs,
-    ):
-        """
-        Create a text representation of a tree sequence.
-
-        :param dict node_labels: If specified, show custom labels for the nodes
-            that are present in the map. Any nodes not specified in the map will
-            not have a node label.
-        :param bool use_ascii: If ``False`` (default) then use unicode
-            `box drawing characters \
-<https://en.wikipedia.org/wiki/Box-drawing_character>`_
-            to render the tree. If ``True``, use plain ascii characters, which look
-            cruder but are less susceptible to misalignment or font substitution.
-            Alternatively, if you are having alignment problems with Unicode, you can try
-            out the solution documented `here \
-<https://github.com/tskit-dev/tskit/issues/189#issuecomment-499114811>`_.
-        :param str time_label_format: A python format string specifying the format (e.g.
-            number of decimal places or significant figures) used to print the numerical
-            time values on the time axis. If ``None``, this defaults to ``"{:.2f}"``.
-        :param str position_label_format: A python format string specifying the format
-            (e.g. number of decimal places or significant figures) used to print genomic
-            positions. If ``None``, this defaults to ``"{:.2f}"``.
-        :param str order: The left-to-right ordering of child nodes in the drawn tree.
-            This can be either: ``"minlex"``, which minimises the differences
-            between adjacent trees (see also the ``"minlex_postorder"`` traversal
-            order for the :meth:`.nodes` method); or ``"tree"`` which draws trees
-            in the left-to-right order defined by the
-            :ref:`quintuply linked tree structure <sec_data_model_tree_structure>`.
-            If not specified or None, this defaults to ``"minlex"``.
-
-        :return: A text representation of a tree sequence.
-        :rtype: str
-        """
-        return str(
-            drawing.TextTreeSequence(
-                self,
-                node_labels=node_labels,
-                use_ascii=use_ascii,
-                time_label_format=time_label_format,
-                position_label_format=position_label_format,
-                order=order,
-            )
-        )
+    def draw_text(self, **kwargs):
+        # TODO document this method.
+        return str(drawing.TextTreeSequence(self, **kwargs))
 
     ############################################
     #
@@ -5976,7 +5981,7 @@ class TreeSequence:
 
         "branch"
             Mean distance in the tree: the average across distinct, randomly chosen pairs
-            of chromosomes and locations in the window, of the mean distance in the tree
+            of chromsomes and locations in the window, of the mean distance in the tree
             between the two samples (in units of time).
 
         "node"
@@ -6030,7 +6035,7 @@ class TreeSequence:
 
         "branch"
             Mean distance in the tree: the average across distinct, randomly
-            chosen pairs of chromosomes (one from each sample set) and locations
+            chosen pairs of chromsomes (one from each sample set) and locations
             in the window, of the mean distance in the tree between the two
             samples (in units of time).
 
@@ -6895,7 +6900,7 @@ class TreeSequence:
         "node"
             For each node, the average proportion of the window on which ``a`` and ``c``
             inherit from that node but ``b`` and ``d`` do not, or vice-versa,
-            minus the average proportion of the window on which ``a`` and ``d``
+            minus the average proportion of the window on which ``a`` anc ``d``
             inherit from that node but ``b`` and ``c`` do not, or vice-versa.
 
         :param list sample_sets: A list of lists of Node IDs, specifying the
@@ -7028,11 +7033,20 @@ class TreeSequence:
         """
         return self._ll_tree_sequence.mean_descendants(sample_sets)
 
-    def genealogical_nearest_neighbours(self, focal, sample_sets, num_threads=0):
+    def genealogical_nearest_neighbours(
+        self,
+        focal,
+        sample_sets,
+        windows=None,
+        time_windows=None,
+        span_normalise=True,
+        time_normalise=True,
+        num_threads=0,
+    ):
         """
         Return the genealogical nearest neighbours (GNN) proportions for the given
-        focal nodes, with reference to two or more sets of interest, averaged over all
-        trees in the tree sequence.
+        focal nodes, with reference to two or more sets of interest, optionally
+        partitioned into span-based `windows` and time-based `time_windows`.
 
         The GNN proportions for a focal node in a single tree are given by first finding
         the most recent common ancestral node :math:`a` between the focal node and any
@@ -7048,9 +7062,9 @@ class TreeSequence:
         GNN proportions for that tree will be 100% :math:`S_1` and 0% :math:`S_2`, or
         :math:`[1.0, 0.0]`.
 
-        For a given focal node, the GNN proportions returned by this function are an
-        average of the GNNs for each tree, weighted by the genomic distance spanned by
-        that tree.
+        If neither `windows` nor `time_windows` are specified, for a given focal node,
+        the GNN proportions returned by this function are an average of the GNNs for
+        each tree, weighted by the genomic distance spanned by that tree.
 
         For an precise mathematical definition of GNN, see https://doi.org/10.1101/458067
 
@@ -7067,13 +7081,25 @@ class TreeSequence:
 
         :param list focal: A list of :math:`n` nodes whose GNNs should be calculated.
         :param list sample_sets: A list of :math:`m` lists of node IDs.
-        :return: An :math:`n`  by :math:`m` array of focal nodes by GNN proportions.
-            Every focal node corresponds to a row. The numbers in each
-            row corresponding to the GNN proportion for each of the passed-in reference
-            sets. Rows therefore sum to one.
+        :param list windows: An increasing list of breakpoints between the :math:`s`
+            windows to compute the statistic in.
+        :param list time_windows: An increasing list of time breakpoints between the
+            :math:`r` time windows to compute the statistic in.
+        :param bool span_normalise: Whether to divide the result by the span of the
+            window (defaults to True).
+        :param bool time_normalise: Whether to divide the result by the span of the
+            time window (defaults to True).
+        :return: If neither `windows` nor `time_windows` are specified, the output is a
+            2d array of :math:`n` by :math:`m`, where :math:`n` is the number of focal
+            nodes whose GNNs are being calculated and :math:`m` is the number of
+            reference sets. If only `windows` is used, the output is a 3d array of
+            :math:`r` by :math:`n` by :math:`m`, where :math:`r` is the number of
+            `windows`. If only `time_windows` is used, the output is a 3d array of
+            :math:`s` by :math:`n` by :math:`m`, where :math:`s` is the number of
+            `time_windows`. If both `windows` and `time_windows` are used, the output
+            is a 4d array of :math:`r` by :math:`s` by :math:`n` by :math:`m`.
         :rtype: numpy.ndarray
         """
-        # TODO add windows=None option: https://github.com/tskit-dev/tskit/issues/193
         if num_threads <= 0:
             return self._ll_tree_sequence.genealogical_nearest_neighbours(
                 focal, sample_sets

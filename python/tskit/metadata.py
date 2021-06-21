@@ -26,7 +26,6 @@ import abc
 import builtins
 import collections
 import copy
-import functools
 import json
 import pprint
 import struct
@@ -680,8 +679,6 @@ class MetadataSchema:
         pass  # pragma: no cover
 
 
-# Often many replicate tree sequences are processed with identical schemas, so cache them
-@functools.lru_cache(maxsize=128)
 def parse_metadata_schema(encoded_schema: str) -> MetadataSchema:
     """
     Create a schema object from its string encoding. The exact class returned is

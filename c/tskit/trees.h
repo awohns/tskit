@@ -278,10 +278,18 @@ int tsk_treeseq_simplify(const tsk_treeseq_t *self, const tsk_id_t *samples,
 int tsk_treeseq_kc_distance(const tsk_treeseq_t *self, const tsk_treeseq_t *other,
     double lambda_, double *result);
 
+/* TODO do these belong in trees or stats? They should probably be in stats.
+ * Keep them here for now until we figure out the correct interface.
+ */
 int tsk_treeseq_genealogical_nearest_neighbours(const tsk_treeseq_t *self,
     const tsk_id_t *focal, size_t num_focal, const tsk_id_t *const *reference_sets,
     const size_t *reference_set_size, size_t num_reference_sets, tsk_flags_t options,
     double *ret_array);
+int tsk_treeseq_windowed_genealogical_nearest_neighbours(tsk_treeseq_t *self,
+    size_t result_dim, tsk_id_t *focal, size_t num_focal, tsk_id_t **reference_sets,
+    size_t *reference_set_size, size_t num_reference_sets, const double *windows,
+    size_t num_windows, const double *time_windows, size_t num_time_windows,
+    tsk_flags_t options, double *ret_array);
 int tsk_treeseq_mean_descendants(const tsk_treeseq_t *self,
     const tsk_id_t *const *reference_sets, const size_t *reference_set_size,
     size_t num_reference_sets, tsk_flags_t options, double *ret_array);

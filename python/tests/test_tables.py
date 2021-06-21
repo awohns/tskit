@@ -115,31 +115,6 @@ class CommonTestsMixin:
             for j in range(num_rows)
         ]
 
-    @pytest.fixture
-    def test_rows(self, scope="session"):
-        test_rows = self.make_transposed_input_data(10)
-        # Annoyingly we have to tweak some types as once added to a row and then put in
-        # an error message things come out differently
-        for n in range(10):
-            for col in test_rows[n].keys():
-                if col in ["timestamp", "record", "ancestral_state", "derived_state"]:
-                    test_rows[n][col] = bytes(test_rows[n][col]).decode("ascii")
-        return test_rows
-
-    @pytest.fixture
-    def table(self, test_rows):
-        table = self.table_class()
-        for row in test_rows:
-            table.add_row(**row)
-        return table
-
-    @pytest.fixture
-    def table_5row(self, test_rows):
-        table_5row = self.table_class()
-        for row in test_rows[:5]:
-            table_5row.add_row(**row)
-        return table_5row
-
     def test_max_rows_increment(self):
         for bad_value in [-1, -(2 ** 10)]:
             with pytest.raises(ValueError):
@@ -1056,34 +1031,52 @@ class MetadataTestsMixin:
 
 
 class AssertEqualsMixin:
-    def test_equal(self, table_5row, test_rows):
+    @pytest.fixture
+    def test_rows(self, scope="session"):
+        test_rows = self.make_transposed_input_data(10)
+        # Annoyingly we have to tweak some types as once added to a row and then put in
+        # an error message things come out differently
+        for n in range(10):
+            for col in test_rows[n].keys():
+                if col in ["timestamp", "record", "ancestral_state", "derived_state"]:
+                    test_rows[n][col] = bytes(test_rows[n][col]).decode("ascii")
+        return test_rows
+
+    @pytest.fixture
+    def table1(self, test_rows):
+        table1 = self.table_class()
+        for row in test_rows[:5]:
+            table1.add_row(**row)
+        return table1
+
+    def test_equal(self, table1, test_rows):
         table2 = self.table_class()
         for row in test_rows[:5]:
             table2.add_row(**row)
-        table_5row.assert_equals(table2)
+        table1.assert_equals(table2)
 
-    def test_type(self, table_5row):
+    def test_type(self, table1):
         with pytest.raises(
             AssertionError,
-            match=f"Types differ: self={type(table_5row)} other=<class 'int'>",
+            match=f"Types differ: self={type(table1)} other=<class 'int'>",
         ):
-            table_5row.assert_equals(42)
+            table1.assert_equals(42)
 
-    def test_metadata_schema(self, table_5row):
-        if hasattr(table_5row, "metadata_schema"):
-            assert table_5row.metadata_schema == tskit.MetadataSchema(None)
-            table2 = table_5row.copy()
+    def test_metadata_schema(self, table1):
+        if hasattr(table1, "metadata_schema"):
+            assert table1.metadata_schema == tskit.MetadataSchema(None)
+            table2 = table1.copy()
             table2.metadata_schema = tskit.MetadataSchema({"codec": "json"})
             with pytest.raises(
                 AssertionError,
-                match=f"{type(table_5row).__name__} metadata schemas differ: self=None "
+                match=f"{type(table1).__name__} metadata schemas differ: self=None "
                 f"other=OrderedDict([('codec', "
                 "'json')])",
             ):
-                table_5row.assert_equals(table2)
-            table_5row.assert_equals(table2, ignore_metadata=True)
+                table1.assert_equals(table2)
+            table1.assert_equals(table2, ignore_metadata=True)
 
-    def test_row_changes(self, table_5row, test_rows):
+    def test_row_changes(self, table1, test_rows):
         for column_name in test_rows[0].keys():
             table2 = self.table_class()
             for row in test_rows[:4]:
@@ -1096,16 +1089,16 @@ class AssertEqualsMixin:
             with pytest.raises(
                 AssertionError,
                 match=re.escape(
-                    f"{type(table_5row).__name__} row 4 differs:\n"
+                    f"{type(table1).__name__} row 4 differs:\n"
                     f"self.{column_name}={test_rows[4][column_name]} "
                     f"other.{column_name}={test_rows[5][column_name]}"
                 ),
             ):
-                table_5row.assert_equals(table2)
+                table1.assert_equals(table2)
             if column_name == "metadata":
-                table_5row.assert_equals(table2, ignore_metadata=True)
+                table1.assert_equals(table2, ignore_metadata=True)
             if column_name == "timestamp":
-                table_5row.assert_equals(table2, ignore_timestamps=True)
+                table1.assert_equals(table2, ignore_timestamps=True)
 
         # Two columns differ, as we don't know the order in the error message
         # test for both independently
@@ -1130,7 +1123,7 @@ class AssertEqualsMixin:
                     f"other.{column_name}={test_rows[5][column_name]}"
                 ),
             ):
-                table_5row.assert_equals(table2)
+                table1.assert_equals(table2)
             with pytest.raises(
                 AssertionError,
                 match=re.escape(
@@ -1138,19 +1131,19 @@ class AssertEqualsMixin:
                     f"other.{column_name2}={test_rows[5][column_name2]}"
                 ),
             ):
-                table_5row.assert_equals(table2)
+                table1.assert_equals(table2)
 
-    def test_num_rows(self, table_5row, test_rows):
+    def test_num_rows(self, table1, test_rows):
         table2 = self.table_class()
         for row in test_rows[:4]:
             table2.add_row(**row)
         with pytest.raises(
             AssertionError,
-            match=f"{type(table_5row).__name__} number of rows differ: self=5 other=4",
+            match=f"{type(table1).__name__} number of rows differ: self=5 other=4",
         ):
-            table_5row.assert_equals(table2)
+            table1.assert_equals(table2)
 
-    def test_metadata(self, table_5row, test_rows):
+    def test_metadata(self, table1, test_rows):
         if "metadata" in test_rows[0].keys():
             table2 = self.table_class()
             for row in test_rows[:4]:
@@ -1163,15 +1156,15 @@ class AssertEqualsMixin:
             with pytest.raises(
                 AssertionError,
                 match=re.escape(
-                    f"{type(table_5row).__name__} row 4 differs:\n"
+                    f"{type(table1).__name__} row 4 differs:\n"
                     f"self.metadata={test_rows[4]['metadata']} "
                     f"other.metadata={test_rows[5]['metadata']}"
                 ),
             ):
-                table_5row.assert_equals(table2)
-            table_5row.assert_equals(table2, ignore_metadata=True)
+                table1.assert_equals(table2)
+            table1.assert_equals(table2, ignore_metadata=True)
 
-    def test_timestamp(self, table_5row, test_rows):
+    def test_timestamp(self, table1, test_rows):
         if "timestamp" in test_rows[0].keys():
             table2 = self.table_class()
             for row in test_rows[:4]:
@@ -1184,185 +1177,16 @@ class AssertEqualsMixin:
             with pytest.raises(
                 AssertionError,
                 match=re.escape(
-                    f"{type(table_5row).__name__} row 4 differs:\n"
+                    f"{type(table1).__name__} row 4 differs:\n"
                     f"self.timestamp={test_rows[4]['timestamp']} "
                     f"other.timestamp={test_rows[5]['timestamp']}"
                 ),
             ):
-                table_5row.assert_equals(table2)
-            table_5row.assert_equals(table2, ignore_timestamps=True)
+                table1.assert_equals(table2)
+            table1.assert_equals(table2, ignore_timestamps=True)
 
 
-class FancyIndexingMixin:
-    @pytest.mark.parametrize(
-        "slic",
-        [
-            slice(None, None),
-            slice(None, 3),
-            slice(2, None),
-            slice(1, 4),
-            slice(4, 1),
-            slice(1, 4, 2),
-            slice(4, 1, 2),
-            slice(4, 1, -1),
-            slice(1, 4, -1),
-            slice(3, None, -1),
-            slice(None, 3, -1),
-            slice(None, None, -2),
-        ],
-    )
-    def test_slice(self, table, test_rows, slic):
-        assert table.num_rows >= 5
-        expected = table.copy()
-        expected.truncate(0)
-        for row in test_rows[slic]:
-            expected.add_row(**row)
-        table[slic].assert_equals(expected)
-
-    @pytest.mark.parametrize(
-        "mask",
-        [
-            [False] * 5,
-            [True] * 5,
-            [True] + [False] * 4,
-            [False, True, False, True, True],
-        ],
-    )
-    def test_boolean_array(self, table_5row, test_rows, mask):
-        assert table_5row.num_rows >= 5
-        expected = table_5row.copy()
-        expected.truncate(0)
-        for flag, row in zip(mask, test_rows[:5]):
-            if flag:
-                expected.add_row(**row)
-        table_5row[mask].assert_equals(expected)
-
-    @pytest.mark.parametrize(
-        "index_array",
-        [
-            [],
-            [0],
-            [4],
-            random.choices(range(5), k=100),
-            np.array([0, 0, 0, 2], dtype=np.uint64),
-            np.array([2, 4, 4, 0], dtype=np.int64),
-            np.array([0, 0, 0, 2], dtype=np.uint32),
-            np.array([2, 4, 4, 0], dtype=np.int32),
-            np.array([4, 3, 4, 1], dtype=np.uint8),
-            np.array([4, 3, 4, 1], dtype=np.int8),
-        ],
-    )
-    def test_index_array(self, table_5row, index_array):
-        assert table_5row.num_rows >= 5
-        expected = table_5row.copy()
-        expected.truncate(0)
-        for index in index_array:
-            expected.append(table_5row[index])
-        table_5row[index_array].assert_equals(expected)
-        table_5row[tuple(index_array)].assert_equals(expected)
-
-    def test_index_range(self, table_5row):
-        expected = table_5row.copy()
-        expected.truncate(0)
-        for index in range(2, 4):
-            expected.append(table_5row[index])
-        table_5row[range(2, 4)].assert_equals(expected)
-
-    @pytest.mark.parametrize(
-        "dtype",
-        [
-            np.float32,
-            np.float64,
-            object,
-            str,
-        ],
-    )
-    def test_bad_dtypes(self, table, dtype):
-        with pytest.raises(TypeError):
-            table[np.zeros((10,), dtype=np.float32)]
-
-    @pytest.mark.parametrize(
-        "dtype",
-        [
-            np.uint32,
-            np.int64,
-            np.uint64,
-        ],
-    )
-    def test_bad_casts(self, table, dtype):
-        with pytest.raises(OverflowError, match="Cannot convert safely"):
-            table[np.asarray([np.iinfo(np.int32).max + 1], dtype=dtype)]
-
-    def test_extrema(self, table):
-        max_ = np.iinfo(np.int32).max
-        with pytest.raises(OverflowError, match="Cannot convert safely"):
-            table[[max_ + 1]]
-
-        # Slice gets clipped to valid range
-        copy = table.copy()
-        copy.clear()
-        table[max_ + 1 : max_ + 2].assert_equals(copy)
-
-        with pytest.raises(OverflowError, match="Cannot convert safely"):
-            table[range(max_ + 1, max_ + 2)]
-
-    @pytest.mark.parametrize(
-        "bad_shape",
-        [
-            [[0]],
-            [[1, 2], [3, 4]],
-        ],
-    )
-    def test_bad_shapes(self, table, bad_shape):
-        with pytest.raises(ValueError, match="object too deep"):
-            table[bad_shape]
-
-    def test_bad_bool_length(self, table):
-        with pytest.raises(
-            IndexError, match="Boolean index must be same length as table"
-        ):
-            table[[False] * (len(table) + 1)]
-        with pytest.raises(
-            IndexError, match="Boolean index must be same length as table"
-        ):
-            table[[False]]
-
-    def test_bad_indexes(self, table):
-        with pytest.raises(_tskit.LibraryError, match="out of bounds"):
-            table[[-1]]
-        with pytest.raises(_tskit.LibraryError, match="out of bounds"):
-            table[range(-5, 0)]
-        with pytest.raises(_tskit.LibraryError, match="out of bounds"):
-            table[[len(table)]]
-        with pytest.raises(TypeError, match="Cannot cast"):
-            table[[5.5]]
-        with pytest.raises(TypeError, match="Cannot convert"):
-            table[[None]]
-        with pytest.raises(TypeError, match="not supported between instances"):
-            table[["foobar"]]
-        with pytest.raises(TypeError, match="Index must be integer, slice or iterable"):
-            table[5.5]
-        with pytest.raises(TypeError, match="Cannot convert to a rectangular array"):
-            table[None]
-        with pytest.raises(TypeError, match="not supported between instances"):
-            table["foobar"]
-
-    def test_not_writable(self, table):
-        with pytest.raises(TypeError, match="object does not support item assignment"):
-            table[5] = 5
-        with pytest.raises(TypeError, match="object does not support item assignment"):
-            table[[5]] = 5
-
-
-common_tests = [
-    CommonTestsMixin,
-    MetadataTestsMixin,
-    AssertEqualsMixin,
-    FancyIndexingMixin,
-]
-
-
-class TestIndividualTable(*common_tests):
+class TestIndividualTable(CommonTestsMixin, MetadataTestsMixin, AssertEqualsMixin):
     columns = [UInt32Column("flags")]
     ragged_list_columns = [
         (DoubleColumn("location"), UInt32Column("location_offset")),
@@ -1491,7 +1315,7 @@ class TestIndividualTable(*common_tests):
         assert a == b
 
 
-class TestNodeTable(*common_tests):
+class TestNodeTable(CommonTestsMixin, MetadataTestsMixin, AssertEqualsMixin):
 
     columns = [
         UInt32Column("flags"),
@@ -1572,7 +1396,7 @@ class TestNodeTable(*common_tests):
             t.add_row(metadata=123)
 
 
-class TestEdgeTable(*common_tests):
+class TestEdgeTable(CommonTestsMixin, MetadataTestsMixin, AssertEqualsMixin):
 
     columns = [
         DoubleColumn("left"),
@@ -1620,7 +1444,7 @@ class TestEdgeTable(*common_tests):
             t.add_row(0, 0, 0, 0, metadata=123)
 
 
-class TestSiteTable(*common_tests):
+class TestSiteTable(CommonTestsMixin, MetadataTestsMixin, AssertEqualsMixin):
     columns = [DoubleColumn("position")]
     ragged_list_columns = [
         (CharColumn("ancestral_state"), UInt32Column("ancestral_state_offset")),
@@ -1675,7 +1499,7 @@ class TestSiteTable(*common_tests):
             assert np.array_equal(table.ancestral_state_offset, ancestral_state_offset)
 
 
-class TestMutationTable(*common_tests):
+class TestMutationTable(CommonTestsMixin, MetadataTestsMixin, AssertEqualsMixin):
     columns = [
         Int32Column("site"),
         Int32Column("node"),
@@ -1747,7 +1571,7 @@ class TestMutationTable(*common_tests):
             assert np.array_equal(table.derived_state_offset, derived_state_offset)
 
 
-class TestMigrationTable(*common_tests):
+class TestMigrationTable(CommonTestsMixin, MetadataTestsMixin, AssertEqualsMixin):
     columns = [
         DoubleColumn("left"),
         DoubleColumn("right"),
@@ -1849,7 +1673,7 @@ class TestProvenanceTable(CommonTestsMixin, AssertEqualsMixin):
         assert t[1].record == "BBBB"
 
 
-class TestPopulationTable(*common_tests):
+class TestPopulationTable(CommonTestsMixin, MetadataTestsMixin, AssertEqualsMixin):
     metadata_mandatory = True
     columns = []
     ragged_list_columns = [(CharColumn("metadata"), UInt32Column("metadata_offset"))]
