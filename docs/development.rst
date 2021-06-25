@@ -651,9 +651,7 @@ On Debian/Ubuntu, these can be installed using
     if so, you can install it instead with ``pip`` by running
     ``pip3 install clang-format==6.0.1 && ln -s clang-format $(which clang-format)-6.0``.
 
-Conda users can install the basic requirements as follows::
-
-    $ conda install -c conda-forge ninja meson cunit
+Conda users can install the basic requirements from `python/requirements/development.txt`.
 
 Unfortunately clang-format is not available on conda, but it is not essential.
 
